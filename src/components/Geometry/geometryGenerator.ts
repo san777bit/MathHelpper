@@ -1,21 +1,22 @@
 // Generator for JSXGraph dynamic geometry constructions and problem presets
 
+function angleMeasureDegrees(points: any[]) {
+  const [start, vertex, end] = points;
+  const firstX = start.X() - vertex.X();
+  const firstY = start.Y() - vertex.Y();
+  const secondX = end.X() - vertex.X();
+  const secondY = end.Y() - vertex.Y();
+  const firstLength = Math.hypot(firstX, firstY);
+  const secondLength = Math.hypot(secondX, secondY);
+  if (!firstLength || !secondLength) return 0;
+
+  const cosine = (firstX * secondX + firstY * secondY) / (firstLength * secondLength);
+  return Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI;
+}
+
 export function createManagedAngle(board: any, points: any[], attributes: Record<string, any> = {}) {
   const settings = board.__geometryAngleSettings ?? { showValues: true, radius: 0.8 };
-  const labelAngle = () => {
-    const [start, vertex, end] = points;
-    const firstX = start.X() - vertex.X();
-    const firstY = start.Y() - vertex.Y();
-    const secondX = end.X() - vertex.X();
-    const secondY = end.Y() - vertex.Y();
-    const firstLength = Math.hypot(firstX, firstY);
-    const secondLength = Math.hypot(secondX, secondY);
-    if (!firstLength || !secondLength) return '0.0°';
-
-    const cosine = (firstX * secondX + firstY * secondY) / (firstLength * secondLength);
-    const radians = Math.acos(Math.max(-1, Math.min(1, cosine)));
-    return `${(radians * 180 / Math.PI).toFixed(1)}°`;
-  };
+  const labelAngle = () => `${angleMeasureDegrees(points).toFixed(1)}°`;
   const getLabelPosition = () => {
     const [start, vertex, end] = points;
     const firstX = start.X() - vertex.X();
@@ -609,6 +610,38 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
         { fontSize: 13 }
       );
       return 'В любом вписанном четырехугольнике сумма противоположных углов равна 180°: ∠A + ∠C = 180°.';
+    }
+
+    case 'parallel_transversal': {
+      const A = board.create('point', [-5, 1], { name: 'A', size: 4, color: '#4f46e5' });
+      const B = board.create('point', [5, 1], { name: 'B', size: 4, color: '#4f46e5' });
+      const l1 = board.create('line', [A, B], { name: 'a', strokeColor: '#ec4899', strokeWidth: 2.5 });
+      const P = board.create('point', [-5, -2], { name: 'P', size: 4, color: '#10b981' });
+      const l2 = board.create('parallel', [l1, P], { name: 'b', strokeColor: '#10b981', strokeWidth: 2.5 });
+
+      const T = board.create('point', [-4, 5], { name: 'T', size: 4, color: '#f59e0b' });
+      const U = board.create('point', [4, -5], { name: 'U', size: 4, color: '#f59e0b' });
+      const transversal = board.create('line', [T, U], { name: 'c (секущая)', strokeColor: '#64748b', strokeWidth: 2 });
+      const I1 = board.create('intersection', [l1, transversal, 0], { name: 'M', size: 3, color: '#0f172a' });
+      const I2 = board.create('intersection', [l2, transversal, 0], { name: 'N', size: 3, color: '#0f172a' });
+      const pointOnL2 = board.create(
+        'point',
+        [() => I2.X() + B.X() - A.X(), () => I2.Y() + B.Y() - A.Y()],
+        { visible: false, fixed: true }
+      );
+
+      createManagedAngle(board, [A, I1, T], { radius: 0.9, strokeColor: '#7c3aed' });
+      createManagedAngle(board, [pointOnL2, I2, U], { radius: 0.9, strokeColor: '#2563eb' });
+      board.create(
+        'text',
+        [
+          -5,
+          5,
+          () => `Накрест лежащие углы: ${angleMeasureDegrees([A, I1, T]).toFixed(1)}° = ${angleMeasureDegrees([pointOnL2, I2, U]).toFixed(1)}°`,
+        ],
+        { fontSize: 13 }
+      );
+      return 'При пересечении параллельных прямых секущей накрест лежащие углы равны.';
     }
 
     case 'thales_theorem': {
