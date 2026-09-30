@@ -18,6 +18,8 @@ import type { GeometryTool } from '../../types';
 import { GEOMETRY_PRESETS_CATALOG } from '../../data/geometryPresets';
 import {
   setupPresetOnBoard,
+  createManagedAngle,
+  setBoardAngleSettings,
   buildTriangleByParams,
   buildTrapezoidByParams,
 } from './geometryGenerator';
@@ -33,7 +35,10 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
   const [activeTool, setActiveTool] = useState<GeometryTool>('select');
   const [showAxes, setShowAxes] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
+  const [showAngleValues, setShowAngleValues] = useState(true);
+  const [angleRadius, setAngleRadius] = useState(0.8);
   const [statusMessage, setStatusMessage] = useState('Выберите инструмент или перемещайте точки');
+  const angleSettingsRef = useRef({ showValues: true, radius: 0.8 });
   
   // Modal for problem builder
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -68,6 +73,7 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
     });
 
     boardRef.current = board;
+    setBoardAngleSettings(board, angleSettingsRef.current.showValues, angleSettingsRef.current.radius);
 
     // Click handler on board
     board.on('down', (e: any) => {
@@ -84,6 +90,11 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
   useEffect(() => {
     (window as any).__geoActiveTool = activeTool;
   }, [activeTool]);
+
+  useEffect(() => {
+    angleSettingsRef.current = { showValues: showAngleValues, radius: angleRadius };
+    setBoardAngleSettings(boardRef.current, showAngleValues, angleRadius);
+  }, [showAngleValues, angleRadius]);
 
   useEffect(() => {
     const board = initBoard();
@@ -200,11 +211,9 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
         if (tool === 'bisector') {
           board.create('bisector', [p1, p2, p3], { strokeColor: '#8b5cf6', strokeWidth: 2 });
         } else if (tool === 'measure_angle') {
-          board.create('angle', [p1, p2, p3], {
-            radius: 1,
+          createManagedAngle(board, [p1, p2, p3], {
             fillColor: 'rgba(245, 158, 11, 0.2)',
             strokeColor: '#f59e0b',
-            withLabel: true,
           });
         }
         pendingObjects.current = [];
@@ -237,6 +246,7 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
       showCopyright: false,
     });
     boardRef.current = newBoard;
+    setBoardAngleSettings(newBoard, showAngleValues, angleRadius);
 
     const msg = setupPresetOnBoard(presetId, newBoard);
     if (msg) setStatusMessage(msg);
@@ -252,6 +262,7 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
         showNavigation: true,
         showCopyright: false,
       });
+      setBoardAngleSettings(boardRef.current, showAngleValues, angleRadius);
       setStatusMessage('Доска очищена. Выберите инструмент или создайте фигуру по задаче.');
     }
   };
@@ -375,35 +386,61 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
         </div>
 
         {/* View Options */}
-        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showAxes}
-                onChange={(e) => setShowAxes(e.target.checked)}
-                className="rounded accent-indigo-600"
-              />
-              Оси
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showGrid}
-                onChange={(e) => setShowGrid(e.target.checked)}
-                className="rounded accent-indigo-600"
-              />
-              Сетка
-            </label>
+        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAxes}
+                  onChange={(e) => setShowAxes(e.target.checked)}
+                  className="rounded accent-indigo-600"
+                />
+                Оси
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showGrid}
+                  onChange={(e) => setShowGrid(e.target.checked)}
+                  className="rounded accent-indigo-600"
+                />
+                Сетка
+              </label>
+            </div>
+
+            <button
+              onClick={handleClear}
+              className="p-1.5 text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg flex items-center gap-1 transition"
+              title="Очистить всё полотно"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
 
-          <button
-            onClick={handleClear}
-            className="p-1.5 text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg flex items-center gap-1 transition"
-            title="Очистить всё полотно"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={showAngleValues}
+                onChange={(e) => setShowAngleValues(e.target.checked)}
+                className="rounded accent-indigo-600"
+              />
+              Значения углов
+            </label>
+            <input
+              type="range"
+              min="0.4"
+              max="1.4"
+              step="0.1"
+              value={angleRadius}
+              onChange={(e) => setAngleRadius(Number(e.target.value))}
+              aria-label="Размер дуги угла"
+              disabled={!showAngleValues}
+              className="min-w-0 flex-1 accent-indigo-600 disabled:opacity-40"
+            />
+            <span className="w-7 text-right text-[10px] text-slate-500">{angleRadius.toFixed(1)}</span>
+          </div>
         </div>
       </div>
 

@@ -1,5 +1,104 @@
 // Generator for JSXGraph dynamic geometry constructions and problem presets
 
+export function createManagedAngle(board: any, points: any[], attributes: Record<string, any> = {}) {
+  const settings = board.__geometryAngleSettings ?? { showValues: true, radius: 0.8 };
+  const labelAngle = () => {
+    const [start, vertex, end] = points;
+    const firstX = start.X() - vertex.X();
+    const firstY = start.Y() - vertex.Y();
+    const secondX = end.X() - vertex.X();
+    const secondY = end.Y() - vertex.Y();
+    const firstLength = Math.hypot(firstX, firstY);
+    const secondLength = Math.hypot(secondX, secondY);
+    if (!firstLength || !secondLength) return '0.0°';
+
+    const cosine = (firstX * secondX + firstY * secondY) / (firstLength * secondLength);
+    const radians = Math.acos(Math.max(-1, Math.min(1, cosine)));
+    return `${(radians * 180 / Math.PI).toFixed(1)}°`;
+  };
+  const getLabelPosition = () => {
+    const [start, vertex, end] = points;
+    const firstX = start.X() - vertex.X();
+    const firstY = start.Y() - vertex.Y();
+    const secondX = end.X() - vertex.X();
+    const secondY = end.Y() - vertex.Y();
+    const firstLength = Math.hypot(firstX, firstY);
+    const secondLength = Math.hypot(secondX, secondY);
+    const bisectorX = firstX / firstLength + secondX / secondLength;
+    const bisectorY = firstY / firstLength + secondY / secondLength;
+    const bisectorLength = Math.hypot(bisectorX, bisectorY);
+    if (!bisectorLength) return [vertex.X(), vertex.Y()];
+
+    const labelRadius = (board.__geometryAngleSettings?.radius ?? settings.radius) * 0.58;
+    return [
+      vertex.X() + (bisectorX / bisectorLength) * labelRadius,
+      vertex.Y() + (bisectorY / bisectorLength) * labelRadius,
+    ];
+  };
+  const angle = board.create('angle', points, {
+    ...attributes,
+    radius: settings.radius,
+    withLabel: false,
+  });
+  angle.__angleValueLabel = board.create(
+    'text',
+    [() => getLabelPosition()[0], () => getLabelPosition()[1], labelAngle],
+    {
+      anchorX: 'middle',
+      anchorY: 'middle',
+      fixed: true,
+      fontSize: 12,
+      highlight: false,
+      strokeColor: attributes.strokeColor ?? '#334155',
+      visible: settings.showValues,
+    }
+  );
+  return angle;
+}
+
+export function setBoardAngleSettings(board: any, showValues: boolean, radius: number) {
+  if (!board) return;
+
+  board.__geometryAngleSettings = { showValues, radius };
+  Object.values(board.objects ?? {}).forEach((element: any) => {
+    if (element.elType === 'angle') {
+      element.setAttribute({ radius, withLabel: false });
+      element.__angleValueLabel?.setAttribute({ visible: showValues });
+    }
+  });
+  board.update();
+}
+
+function createAxisRay(board: any, origin: any, horizontal: boolean, directionSign = 1) {
+  const directionPoint = board.create(
+    'point',
+    [
+      () => origin.X() + (horizontal ? directionSign : 0),
+      () => origin.Y() + (horizontal ? 0 : directionSign),
+    ],
+    { visible: false, fixed: true }
+  );
+  return board.create('line', [origin, directionPoint], { visible: false, straightFirst: false });
+}
+
+function createForwardRay(board: any, origin: any, direction: any) {
+  const endpoint = board.create(
+    'point',
+    [() => origin.X() + direction[0](), () => origin.Y() + direction[1]()],
+    { visible: false, fixed: true }
+  );
+  return board.create('line', [origin, endpoint], { visible: false, straightFirst: false });
+}
+
+function createRightTriangleVertices(board: any, cPosition: [number, number], bPosition: [number, number], aPosition: [number, number]) {
+  const C = board.create('point', cPosition, { name: 'C (90°)', size: 4, color: '#ef4444' });
+  const baseLine = createAxisRay(board, C, true);
+  const perpendicular = createAxisRay(board, C, false);
+  const B = board.create('glider', [...bPosition, baseLine], { name: 'B', size: 4, color: '#3b82f6' });
+  const A = board.create('glider', [...aPosition, perpendicular], { name: 'A', size: 4, color: '#3b82f6' });
+  return { A, B, C };
+}
+
 export function setupPresetOnBoard(presetId: string, board: any): string {
   if (!board) return '';
 
@@ -30,11 +129,9 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
     }
 
     case 'pythagoras': {
-      const C = board.create('point', [0, 0], { name: 'C (90°)', size: 4, color: '#ef4444' });
-      const B = board.create('point', [4, 0], { name: 'B', size: 4, color: '#3b82f6' });
-      const A = board.create('point', [0, 3], { name: 'A', size: 4, color: '#3b82f6' });
+      const { A, B, C } = createRightTriangleVertices(board, [0, 0], [4, 0], [0, 3]);
 
-      board.create('angle', [B, C, A], { radius: 0.6, type: 'square' });
+      createManagedAngle(board, [B, C, A], { radius: 0.6, type: 'square' });
 
       board.create('polygon', [C, B, A], {
         fillColor: 'rgba(59, 130, 246, 0.1)',
@@ -59,11 +156,9 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
     }
 
     case 'right_triangle_height': {
-      const C = board.create('point', [0, 0], { name: 'C (90°)', size: 4, color: '#ef4444' });
-      const B = board.create('point', [5, 0], { name: 'B', size: 4, color: '#3b82f6' });
-      const A = board.create('point', [0, 4], { name: 'A', size: 4, color: '#3b82f6' });
+      const { A, B, C } = createRightTriangleVertices(board, [0, 0], [5, 0], [0, 4]);
 
-      board.create('angle', [B, C, A], { radius: 0.6, type: 'square' });
+      createManagedAngle(board, [B, C, A], { radius: 0.6, type: 'square' });
       board.create('polygon', [C, B, A], {
         fillColor: 'rgba(59, 130, 246, 0.08)',
         borders: { strokeWidth: 3, strokeColor: '#3b82f6' },
@@ -75,7 +170,7 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
       const perp = board.create('perpendicular', [hyp, C], { visible: false });
       const H = board.create('intersection', [hyp, perp], { name: 'H', size: 3, color: '#10b981' });
       board.create('segment', [C, H], { strokeColor: '#10b981', strokeWidth: 2.5, dash: 2 });
-      board.create('angle', [B, H, C], { radius: 0.5, type: 'square' });
+      createManagedAngle(board, [B, H, C], { radius: 0.5, type: 'square' });
 
       board.create(
         'text',
@@ -100,8 +195,9 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
       // C is on perpendicular bisector of AB
       board.create('segment', [A, B], { visible: false });
       const mid = board.create('midpoint', [A, B], { name: 'H', size: 3, color: '#10b981' });
-
-      const C = board.create('point', [0, 4], { name: 'C', size: 4, color: '#ec4899' });
+      const baseLine = board.create('line', [A, B], { visible: false });
+      const perpendicular = board.create('perpendicular', [baseLine, mid], { visible: false });
+      const C = board.create('glider', [0, 4, perpendicular], { name: 'C', size: 4, color: '#ec4899' });
 
       board.create('polygon', [A, B, C], {
         fillColor: 'rgba(236, 72, 153, 0.08)',
@@ -110,7 +206,7 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
 
       // Altitude CH
       board.create('segment', [C, mid], { strokeColor: '#10b981', strokeWidth: 2.5, dash: 2 });
-      board.create('angle', [B, mid, C], { radius: 0.5, type: 'square' });
+      createManagedAngle(board, [B, mid, C], { radius: 0.5, type: 'square' });
 
       board.create(
         'text',
@@ -131,8 +227,17 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
     case 'equilateral_triangle': {
       const A = board.create('point', [-3, -2], { name: 'A', size: 4, color: '#4f46e5' });
       const B = board.create('point', [3, -2], { name: 'B', size: 4, color: '#4f46e5' });
-      // C calculated to form equilateral
-      const C = board.create('point', [0, -2 + 3 * Math.sqrt(3)], { name: 'C', size: 4, color: '#4f46e5' });
+      const mid = board.create('midpoint', [A, B], { visible: false });
+      const heightPoint = board.create(
+        'point',
+        [
+          () => mid.X() - ((B.Y() - A.Y()) * Math.sqrt(3)) / 2,
+          () => mid.Y() + ((B.X() - A.X()) * Math.sqrt(3)) / 2,
+        ],
+        { visible: false, fixed: true }
+      );
+      const locus = board.create('circle', [mid, heightPoint], { visible: false });
+      const C = board.create('glider', [0, -2 + 3 * Math.sqrt(3), locus], { name: 'C', size: 4, color: '#4f46e5' });
 
       board.create('polygon', [A, B, C], {
         fillColor: 'rgba(79, 70, 229, 0.1)',
@@ -140,9 +245,9 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
       });
 
       // Angles
-      board.create('angle', [B, A, C], { radius: 0.8, withLabel: true });
-      board.create('angle', [C, B, A], { radius: 0.8, withLabel: true });
-      board.create('angle', [A, C, B], { radius: 0.8, withLabel: true });
+      createManagedAngle(board, [B, A, C], { radius: 0.8 });
+      createManagedAngle(board, [C, B, A], { radius: 0.8 });
+      createManagedAngle(board, [A, C, B], { radius: 0.8 });
 
       return 'Правильный треугольник: все 3 стороны равны, все 3 угла равны 60°.';
     }
@@ -273,7 +378,8 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
       const A = board.create('point', [-4, -2.5], { name: 'A', size: 4, color: '#4f46e5' });
       const B = board.create('point', [4, -2.5], { name: 'B', size: 4, color: '#4f46e5' });
       const D = board.create('point', [-2.5, 2.5], { name: 'D', size: 4, color: '#4f46e5' });
-      const C = board.create('point', [2.5, 2.5], { name: 'C', size: 4, color: '#4f46e5' });
+      const parallel = createForwardRay(board, D, [() => B.X() - A.X(), () => B.Y() - A.Y()]);
+      const C = board.create('glider', [2.5, 2.5, parallel], { name: 'C', size: 4, color: '#4f46e5' });
 
       board.create('polygon', [A, B, C, D], {
         fillColor: 'rgba(79, 70, 229, 0.08)',
@@ -344,10 +450,12 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
 
     case 'rhombus_diagonals': {
       const O = board.create('point', [0, 0], { name: 'O', size: 3, color: '#94a3b8' });
-      const A = board.create('point', [-4, 0], { name: 'A', size: 4, color: '#4f46e5' });
-      const C = board.create('point', [4, 0], { name: 'C', size: 4, color: '#4f46e5' });
-      const B = board.create('point', [0, 2.5], { name: 'B', size: 4, color: '#4f46e5' });
-      const D = board.create('point', [0, -2.5], { name: 'D', size: 4, color: '#4f46e5' });
+      const horizontal = createAxisRay(board, O, true, -1);
+      const vertical = createAxisRay(board, O, false);
+      const A = board.create('glider', [-4, 0, horizontal], { name: 'A', size: 4, color: '#4f46e5' });
+      const B = board.create('glider', [0, 2.5, vertical], { name: 'B', size: 4, color: '#4f46e5' });
+      const C = board.create('point', [() => 2 * O.X() - A.X(), () => 2 * O.Y() - A.Y()], { name: 'C', size: 4, color: '#4f46e5' });
+      const D = board.create('point', [() => 2 * O.X() - B.X(), () => 2 * O.Y() - B.Y()], { name: 'D', size: 4, color: '#4f46e5' });
 
       board.create('polygon', [A, B, C, D], {
         fillColor: 'rgba(79, 70, 229, 0.08)',
@@ -356,36 +464,35 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
 
       board.create('segment', [A, C], { strokeColor: '#ef4444', strokeWidth: 2 });
       board.create('segment', [B, D], { strokeColor: '#ef4444', strokeWidth: 2 });
-      board.create('angle', [C, O, B], { radius: 0.6, type: 'square' });
+      createManagedAngle(board, [C, O, B], { radius: 0.6, type: 'square' });
 
       return 'Диагонали ромба взаимно перпендикулярны (AC ⊥ BD) и делят его углы пополам.';
     }
 
     case 'inscribed_central_angle': {
       const O = board.create('point', [0, 0], { name: 'O (Центр)', size: 4, color: '#f59e0b' });
-      board.create('circle', [O, 4], { strokeColor: '#3b82f6', strokeWidth: 2.5 });
+      const circle = board.create('circle', [O, 4], { strokeColor: '#3b82f6', strokeWidth: 2.5 });
 
 
-      const A = board.create('point', [4 * Math.cos(-0.6), 4 * Math.sin(-0.6)], { name: 'A', size: 3, color: '#4f46e5' });
-      const B = board.create('point', [4 * Math.cos(1.2), 4 * Math.sin(1.2)], { name: 'B', size: 3, color: '#4f46e5' });
-      const C = board.create('point', [4 * Math.cos(2.8), 4 * Math.sin(2.8)], { name: 'C (Вписанный)', size: 4, color: '#ec4899' });
+      const A = board.create('glider', [4 * Math.cos(-0.6), 4 * Math.sin(-0.6), circle], { name: 'A', size: 3, color: '#4f46e5' });
+      const B = board.create('glider', [4 * Math.cos(1.2), 4 * Math.sin(1.2), circle], { name: 'B', size: 3, color: '#4f46e5' });
+      const allowedArc = board.create('arc', [O, B, A], { visible: false });
+      const C = board.create('glider', [4 * Math.cos(2.8), 4 * Math.sin(2.8), allowedArc], { name: 'C (Вписанный)', size: 4, color: '#ec4899' });
 
       // Central angle AOB
       board.create('segment', [O, A], { strokeColor: '#f59e0b', strokeWidth: 2, dash: 2 });
       board.create('segment', [O, B], { strokeColor: '#f59e0b', strokeWidth: 2, dash: 2 });
-      const angleCentral = board.create('angle', [A, O, B], {
+      const angleCentral = createManagedAngle(board, [A, O, B], {
         fillColor: 'rgba(245, 158, 11, 0.25)',
         strokeColor: '#f59e0b',
-        withLabel: true,
       });
 
       // Inscribed angle ACB
       board.create('segment', [C, A], { strokeColor: '#ec4899', strokeWidth: 2.5 });
       board.create('segment', [C, B], { strokeColor: '#ec4899', strokeWidth: 2.5 });
-      const angleInscribed = board.create('angle', [A, C, B], {
+      const angleInscribed = createManagedAngle(board, [A, C, B], {
         fillColor: 'rgba(236, 72, 153, 0.25)',
         strokeColor: '#ec4899',
-        withLabel: true,
       });
 
       board.create(
@@ -408,8 +515,8 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
 
     case 'tangent_radius': {
       const O = board.create('point', [0, 0], { name: 'O', size: 4, color: '#f59e0b' });
-      board.create('circle', [O, 3.5], { strokeColor: '#3b82f6', strokeWidth: 2.5 });
-      const T = board.create('point', [0, 3.5], { name: 'T (Точка касания)', size: 4, color: '#ec4899' });
+      const circle = board.create('circle', [O, 3.5], { strokeColor: '#3b82f6', strokeWidth: 2.5 });
+      const T = board.create('glider', [0, 3.5, circle], { name: 'T (Точка касания)', size: 4, color: '#ec4899' });
 
 
       // Radius OT
@@ -425,8 +532,12 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
       });
 
 
-      const P = board.create('point', [3, 3.5], { visible: false });
-      board.create('angle', [P, T, O], { radius: 0.6, type: 'square' });
+      const P = board.create(
+        'point',
+        [() => T.X() + T.Y() - O.Y(), () => T.Y() - T.X() + O.X()],
+        { visible: false, fixed: true }
+      );
+      createManagedAngle(board, [P, T, O], { radius: 0.6, type: 'square' });
 
       return 'Касательная к окружности всегда строго перпендикулярна радиусу, проведенному в точку касания (R ⊥ l).';
     }
@@ -434,7 +545,8 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
     case 'two_tangents': {
       const O = board.create('point', [0, 0], { name: 'O', size: 4, color: '#f59e0b' });
       const circ = board.create('circle', [O, 3], { strokeColor: '#3b82f6', strokeWidth: 2.5 });
-      const M = board.create('point', [6, 0], { name: 'M', size: 4, color: '#4f46e5' });
+      const exteriorCircle = board.create('circle', [O, 5], { visible: false });
+      const M = board.create('glider', [5, 0, exteriorCircle], { name: 'M', size: 4, color: '#4f46e5' });
 
       // Tangent points from M
       board.create('segment', [O, M], { strokeColor: '#94a3b8', strokeWidth: 2, dash: 2 });
@@ -468,20 +580,20 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
 
     case 'cyclic_quad': {
       const O = board.create('point', [0, 0], { name: 'O', size: 3, color: '#f59e0b' });
-      board.create('circle', [O, 4], { strokeColor: '#3b82f6', strokeWidth: 2 });
+      const circle = board.create('circle', [O, 4], { strokeColor: '#3b82f6', strokeWidth: 2 });
 
-      const A = board.create('point', [-3.8, -1.2], { name: 'A', size: 4, color: '#4f46e5' });
-      const B = board.create('point', [1.5, -3.7], { name: 'B', size: 4, color: '#4f46e5' });
-      const C = board.create('point', [3.9, 0.9], { name: 'C', size: 4, color: '#4f46e5' });
-      const D = board.create('point', [-1.2, 3.8], { name: 'D', size: 4, color: '#4f46e5' });
+      const A = board.create('glider', [-3.8, -1.2, circle], { name: 'A', size: 4, color: '#4f46e5' });
+      const B = board.create('glider', [1.5, -3.7, circle], { name: 'B', size: 4, color: '#4f46e5' });
+      const C = board.create('glider', [3.9, 0.9, circle], { name: 'C', size: 4, color: '#4f46e5' });
+      const D = board.create('glider', [-1.2, 3.8, circle], { name: 'D', size: 4, color: '#4f46e5' });
 
       board.create('polygon', [A, B, C, D], {
         fillColor: 'rgba(79, 70, 229, 0.08)',
         borders: { strokeWidth: 2.5, strokeColor: '#4f46e5' },
       });
 
-      const angA = board.create('angle', [D, A, B], { radius: 0.8, withLabel: true });
-      const angC = board.create('angle', [B, C, D], { radius: 0.8, withLabel: true });
+      const angA = createManagedAngle(board, [D, A, B], { radius: 0.8 });
+      const angC = createManagedAngle(board, [B, C, D], { radius: 0.8 });
 
       board.create(
         'text',
@@ -508,13 +620,14 @@ export function setupPresetOnBoard(presetId: string, board: any): string {
       board.create('line', [O, R2], { straightFirst: false, strokeColor: '#475569', strokeWidth: 2 });
 
       // Parallel lines
-      const A1 = board.create('point', [-1.5, 0.45], { name: 'A1', size: 3, color: '#ec4899' });
-      const B1 = board.create('point', [-1.5, -3.0], { name: 'B1', size: 3, color: '#ec4899' });
+      const ray1 = board.create('line', [O, R1], { visible: false, straightFirst: false });
+      const ray2 = board.create('line', [O, R2], { visible: false, straightFirst: false });
+      const A1 = board.create('glider', [-1.5, 0.45, ray1], { name: 'A1', size: 3, color: '#ec4899' });
+      const B1 = board.create('glider', [-1.5, -3.0, ray2], { name: 'B1', size: 3, color: '#ec4899' });
       const l1 = board.create('line', [A1, B1], { strokeColor: '#ec4899', strokeWidth: 2.5 });
 
-      const A2 = board.create('point', [2, 2.2], { name: 'A2', size: 3, color: '#10b981' });
+      const A2 = board.create('glider', [2, 2.2, ray1], { name: 'A2', size: 3, color: '#10b981' });
       const l2 = board.create('parallel', [l1, A2], { strokeColor: '#10b981', strokeWidth: 2.5 });
-      const ray2 = board.create('line', [O, R2], { visible: false });
       const B2 = board.create('intersection', [l2, ray2], { name: 'B2', size: 3, color: '#10b981' });
 
       board.create(
@@ -562,11 +675,14 @@ export function buildTriangleByParams(
     const scA = a * scale;
     const scB = b * scale;
 
-    const C = board.create('point', [-scB / 2, -scA / 2], { name: `C (90°)`, size: 4, color: '#ef4444' });
-    const B = board.create('point', [scB / 2, -scA / 2], { name: `B`, size: 4, color: '#3b82f6' });
-    const A = board.create('point', [-scB / 2, scA / 2], { name: `A`, size: 4, color: '#3b82f6' });
+    const { A, B, C } = createRightTriangleVertices(
+      board,
+      [-scB / 2, -scA / 2],
+      [scB / 2, -scA / 2],
+      [-scB / 2, scA / 2]
+    );
 
-    board.create('angle', [B, C, A], { radius: 0.6, type: 'square' });
+    createManagedAngle(board, [B, C, A], { radius: 0.6, type: 'square' });
     board.create('polygon', [C, B, A], {
       fillColor: 'rgba(59, 130, 246, 0.08)',
       borders: { strokeWidth: 3, strokeColor: '#3b82f6' },
@@ -594,16 +710,18 @@ export function buildTriangleByParams(
 
     const A = board.create('point', [-scBase / 2, -scH / 2], { name: 'A', size: 4, color: '#4f46e5' });
     const B = board.create('point', [scBase / 2, -scH / 2], { name: 'B', size: 4, color: '#4f46e5' });
-    const C = board.create('point', [0, scH / 2], { name: 'C', size: 4, color: '#ec4899' });
+    const H = board.create('midpoint', [A, B], { name: 'H', size: 3, color: '#10b981' });
+    const baseLine = board.create('line', [A, B], { visible: false });
+    const perpendicular = board.create('perpendicular', [baseLine, H], { visible: false });
+    const C = board.create('glider', [0, scH / 2, perpendicular], { name: 'C', size: 4, color: '#ec4899' });
 
     board.create('polygon', [A, B, C], {
       fillColor: 'rgba(236, 72, 153, 0.08)',
       borders: { strokeWidth: 3, strokeColor: '#ec4899' },
     });
 
-    const H = board.create('point', [0, -scH / 2], { name: 'H', size: 3, color: '#10b981' });
     board.create('segment', [C, H], { strokeColor: '#10b981', strokeWidth: 2.5, dash: 2 });
-    board.create('angle', [B, H, C], { radius: 0.5, type: 'square' });
+    createManagedAngle(board, [B, H, C], { radius: 0.5, type: 'square' });
 
     const side = Math.hypot(base / 2, height);
     board.create(
@@ -629,17 +747,16 @@ export function buildTriangleByParams(
     }
 
     const scale = Math.max(a, b, c) > 6 ? 6 / Math.max(a, b, c) : 1;
-    // Place side c along x axis
-    const A = board.create('point', [(-c * scale) / 2, -1], { name: 'A', size: 4, color: '#4f46e5' });
-    const B = board.create('point', [(c * scale) / 2, -1], { name: 'B', size: 4, color: '#4f46e5' });
-
-    // C calculated by law of cosines
-    const cosA = (b * b + c * c - a * a) / (2 * b * c);
-    const angleA = Math.acos(cosA);
-    const cx = (-c * scale) / 2 + b * scale * Math.cos(angleA);
-    const cy = -1 + b * scale * Math.sin(angleA);
-
-    const C = board.create('point', [cx, cy], { name: 'C', size: 4, color: '#4f46e5' });
+    const scaledA = a * scale;
+    const scaledB = b * scale;
+    const scaledC = c * scale;
+    const A = board.create('point', [-scaledC / 2, -1], { name: 'A', size: 4, color: '#4f46e5' });
+    const basePoint = board.create('point', [() => A.X() + scaledC, () => A.Y()], { visible: false, fixed: true });
+    const baseCircle = board.create('circle', [A, basePoint], { visible: false });
+    const B = board.create('glider', [scaledC / 2, -1, baseCircle], { name: 'B', size: 4, color: '#4f46e5' });
+    const circleA = board.create('circle', [A, scaledB], { visible: false });
+    const circleB = board.create('circle', [B, scaledA], { visible: false });
+    const C = board.create('intersection', [circleA, circleB, 0], { name: 'C', size: 4, color: '#4f46e5' });
 
     board.create('polygon', [A, B, C], {
       fillColor: 'rgba(79, 70, 229, 0.08)',
@@ -673,8 +790,9 @@ export function buildTrapezoidByParams(board: any, a: number, b: number, h: numb
 
   const A = board.create('point', [-scA / 2, -scH / 2], { name: 'A', size: 4, color: '#4f46e5' });
   const B = board.create('point', [scA / 2, -scH / 2], { name: 'B', size: 4, color: '#4f46e5' });
-  const C = board.create('point', [scB / 2, scH / 2], { name: 'C', size: 4, color: '#4f46e5' });
   const D = board.create('point', [-scB / 2, scH / 2], { name: 'D', size: 4, color: '#4f46e5' });
+  const parallel = createForwardRay(board, D, [() => B.X() - A.X(), () => B.Y() - A.Y()]);
+  const C = board.create('glider', [scB / 2, scH / 2, parallel], { name: 'C', size: 4, color: '#4f46e5' });
 
   board.create('polygon', [A, B, C, D], {
     fillColor: 'rgba(79, 70, 229, 0.08)',
