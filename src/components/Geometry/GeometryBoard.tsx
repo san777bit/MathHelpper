@@ -9,15 +9,25 @@ import {
   Trash2,
   Compass,
   Info,
+  Wand2,
+  Search,
+  Sparkles
 } from 'lucide-react';
+
 import type { GeometryTool } from '../../types';
+import { GEOMETRY_PRESETS_CATALOG } from '../../data/geometryPresets';
+import {
+  setupPresetOnBoard,
+  buildTriangleByParams,
+  buildTrapezoidByParams,
+} from './geometryGenerator';
+import { GeometryTaskBuilderModal } from './GeometryTaskBuilderModal';
 
 interface GeometryBoardProps {
   isDark?: boolean;
 }
 
 export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
-
   const containerId = 'jsxgraph-container';
   const boardRef = useRef<any>(null);
   const [activeTool, setActiveTool] = useState<GeometryTool>('select');
@@ -25,6 +35,11 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
   const [showGrid, setShowGrid] = useState(true);
   const [statusMessage, setStatusMessage] = useState('Выберите инструмент или перемещайте точки');
   
+  // Modal for problem builder
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [presetSearch, setPresetSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
   // Selection buffer for multi-click tools (e.g. 2 points for segment, 3 for angle)
   const pendingObjects = useRef<any[]>([]);
 
@@ -208,12 +223,11 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
     }
   };
 
-  // Preset Demonstrations
-  const loadPreset = (presetName: string, targetBoard?: any) => {
+  // Load a preset by ID
+  const loadPreset = (presetId: string, targetBoard?: any) => {
     const board = targetBoard || boardRef.current;
     if (!board) return;
 
-    // Clear board
     JXG.JSXGraph.freeBoard(board);
     const newBoard = JXG.JSXGraph.initBoard(containerId, {
       boundingbox: [-7, 7, 7, -7],
@@ -224,87 +238,8 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
     });
     boardRef.current = newBoard;
 
-    if (presetName === 'circumscribed') {
-      // Triangle with incenter & circumcenter
-      const A = newBoard.create('point', [-4, -3], { name: 'A', size: 4, color: '#4f46e5' });
-      const B = newBoard.create('point', [4, -3], { name: 'B', size: 4, color: '#4f46e5' });
-      const C = newBoard.create('point', [0, 4], { name: 'C', size: 4, color: '#4f46e5' });
-
-      newBoard.create('polygon', [A, B, C], {
-        fillColor: 'rgba(79, 70, 229, 0.08)',
-        borders: { strokeWidth: 3, strokeColor: '#4f46e5' },
-      });
-
-      // Circumcircle (Описанная окружность)
-      newBoard.create('circumcircle', [A, B, C], {
-        strokeColor: '#06b6d4',
-        strokeWidth: 2,
-        dash: 1,
-        center: { name: 'O (Описан.)', color: '#06b6d4', size: 3 },
-      });
-
-      // Incircle (Вписанная окружность)
-      newBoard.create('incircle', [A, B, C], {
-        strokeColor: '#ec4899',
-        strokeWidth: 2,
-        center: { name: 'I (Вписан.)', color: '#ec4899', size: 3 },
-      });
-      setStatusMessage('Вписанная (розовая) и описанная (голубая) окружности треугольника ABC. Подвигайте вершины!');
-    } else if (presetName === 'pythagoras') {
-      // Right triangle with squares
-      const A = newBoard.create('point', [0, 0], { name: 'C (90°)', size: 4, color: '#ef4444', fixed: false });
-      const B = newBoard.create('point', [4, 0], { name: 'B', size: 4, color: '#3b82f6' });
-      const C = newBoard.create('point', [0, 3], { name: 'A', size: 4, color: '#3b82f6' });
-
-      // Right angle indicator
-      newBoard.create('angle', [B, A, C], { radius: 0.6, type: 'square' });
-
-      newBoard.create('polygon', [A, B, C], {
-        fillColor: 'rgba(59, 130, 246, 0.1)',
-        borders: { strokeWidth: 3, strokeColor: '#3b82f6' },
-      });
-
-      // Label with hypotenuse formula
-      newBoard.create('text', [
-        -2,
-        5,
-        () => {
-          const a = A.Dist(B);
-          const b = A.Dist(C);
-          const c = B.Dist(C);
-          return `a = ${a.toFixed(2)}, b = ${b.toFixed(2)}, c = ${c.toFixed(2)}<br>c² = ${(c * c).toFixed(1)} = a² + b² = ${(a * a + b * b).toFixed(1)}`;
-        },
-      ], { fontSize: 14 });
-
-
-      setStatusMessage('Теорема Пифагора: a² + b² = c². Потяните за катеты A или B!');
-    } else if (presetName === 'medians') {
-      // Medians and Centroid
-      const A = newBoard.create('point', [-5, -2], { name: 'A', size: 4, color: '#4f46e5' });
-      const B = newBoard.create('point', [5, -2], { name: 'B', size: 4, color: '#4f46e5' });
-      const C = newBoard.create('point', [1, 5], { name: 'C', size: 4, color: '#4f46e5' });
-
-      newBoard.create('polygon', [A, B, C], {
-        fillColor: 'rgba(79, 70, 229, 0.08)',
-        borders: { strokeWidth: 3, strokeColor: '#4f46e5' },
-      });
-
-      const M_c = newBoard.create('midpoint', [A, B], { name: 'C1', size: 2, color: '#10b981' });
-      const M_a = newBoard.create('midpoint', [B, C], { name: 'A1', size: 2, color: '#10b981' });
-      const M_b = newBoard.create('midpoint', [A, C], { name: 'B1', size: 2, color: '#10b981' });
-
-      newBoard.create('segment', [C, M_c], { strokeColor: '#10b981', dash: 2, strokeWidth: 2 });
-      newBoard.create('segment', [A, M_a], { strokeColor: '#10b981', dash: 2, strokeWidth: 2 });
-      newBoard.create('segment', [B, M_b], { strokeColor: '#10b981', dash: 2, strokeWidth: 2 });
-
-      newBoard.create('intersection', [newBoard.create('line', [C, M_c], { visible: false }), newBoard.create('line', [A, M_a], { visible: false })], {
-        name: 'M (Центроид, 2:1)',
-        color: '#f59e0b',
-        size: 4,
-      });
-
-      setStatusMessage('Медианы треугольника пересекаются в одной точке M и делятся ею в отношении 2:1, считая от вершины!');
-    }
+    const msg = setupPresetOnBoard(presetId, newBoard);
+    if (msg) setStatusMessage(msg);
   };
 
   const handleClear = () => {
@@ -317,54 +252,131 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
         showNavigation: true,
         showCopyright: false,
       });
-      setStatusMessage('Доска очищена');
+      setStatusMessage('Доска очищена. Выберите инструмент или создайте фигуру по задаче.');
     }
   };
+
+  // Custom task builders callbacks
+  const handleBuildRightTriangle = (a: number, b: number) => {
+    handleClear();
+    const msg = buildTriangleByParams(boardRef.current, { type: 'right', a, b });
+    if (msg) setStatusMessage(msg);
+  };
+
+  const handleBuildIsoscelesTriangle = (base: number, height: number) => {
+    handleClear();
+    const msg = buildTriangleByParams(boardRef.current, { type: 'isosceles', a: base, h: height });
+    if (msg) setStatusMessage(msg);
+  };
+
+  const handleBuildTriangleBySides = (a: number, b: number, c: number) => {
+    handleClear();
+    const msg = buildTriangleByParams(boardRef.current, { type: 'sides', a, b, c });
+    if (msg) setStatusMessage(msg);
+  };
+
+  const handleBuildTrapezoid = (a: number, b: number, h: number) => {
+    handleClear();
+    const msg = buildTrapezoidByParams(boardRef.current, a, b, h);
+    if (msg) setStatusMessage(msg);
+  };
+
+  // Filter presets
+  const filteredPresets = GEOMETRY_PRESETS_CATALOG.filter((item) => {
+    const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
+    const q = presetSearch.toLowerCase();
+    const matchesSearch =
+      item.title.toLowerCase().includes(q) ||
+      item.description.toLowerCase().includes(q) ||
+      item.categoryLabel.toLowerCase().includes(q);
+    return matchesCat && matchesSearch;
+  });
 
   return (
     <div className="relative w-full h-full flex flex-col md:flex-row overflow-hidden bg-slate-50 dark:bg-slate-950">
       {/* Sidebar: Presets & Tools */}
-      <div className="w-full md:w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-10 p-3 space-y-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-            <Compass className="w-4 h-4 text-indigo-600" /> Геометрия
-          </h2>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
-            JSXGraph
-          </span>
+      <div className="w-full md:w-72 lg:w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-10 p-3 space-y-3 shadow-sm max-h-[45vh] md:max-h-full">
+        {/* Header & Quick Builder Button */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <Compass className="w-4 h-4 text-indigo-600" /> Геометрия
+            </h2>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+              {GEOMETRY_PRESETS_CATALOG.length} теорем
+            </span>
+          </div>
+
+          {/* Quick Problem Builder Launch Button */}
+          <button
+            onClick={() => setIsBuilderOpen(true)}
+            className="w-full py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-indigo-500/20 transition transform active:scale-95"
+          >
+            <Wand2 className="w-4 h-4 text-amber-300" /> Построить по задаче (Мастер)
+          </button>
         </div>
 
-        {/* Construction Presets */}
-        <div>
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
-            Готовые теоремы:
-          </span>
-          <div className="space-y-1.5">
-            <button
-              onClick={() => loadPreset('circumscribed')}
-              className="w-full text-left px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-            >
-              🔵 Вписанная и описанная окр.
-            </button>
-            <button
-              onClick={() => loadPreset('pythagoras')}
-              className="w-full text-left px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-            >
-              📐 Теорема Пифагора
-            </button>
-            <button
-              onClick={() => loadPreset('medians')}
-              className="w-full text-left px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
-            >
-              🔺 Медианы и Центроид (2:1)
-            </button>
+        {/* Presets Search & Filter */}
+        <div className="space-y-1.5">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={presetSearch}
+              onChange={(e) => setPresetSearch(e.target.value)}
+              placeholder="Поиск теоремы или фигуры..."
+              className="w-full pl-8 pr-2.5 py-1 text-xs bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 outline-none"
+            />
+          </div>
+
+          <div className="flex gap-1 overflow-x-auto pb-1 text-[11px]">
+            {[
+              { id: 'all', label: 'Все' },
+              { id: 'triangles', label: 'Треугольники' },
+              { id: 'quads', label: '4-угольники' },
+              { id: 'circles', label: 'Окружности' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-2 py-0.5 rounded-md whitespace-nowrap transition ${
+                  selectedCategory === cat.id
+                    ? 'bg-indigo-600 text-white font-medium'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
         </div>
 
+        {/* Construction Presets List */}
+        <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+          {filteredPresets.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => loadPreset(item.id)}
+              className="w-full text-left p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-slate-200/80 dark:border-slate-800 transition group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 leading-tight">
+                  {item.title}
+                </span>
+                {item.badge && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                    {item.badge}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{item.description}</p>
+            </button>
+          ))}
+        </div>
+
         {/* View Options */}
-        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Вид:</span>
-          <div className="flex items-center gap-2">
+        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
               <input
                 type="checkbox"
@@ -372,7 +384,7 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
                 onChange={(e) => setShowAxes(e.target.checked)}
                 className="rounded accent-indigo-600"
               />
-              Оси X/Y
+              Оси
             </label>
             <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
               <input
@@ -384,15 +396,13 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
               Сетка
             </label>
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="pt-auto mt-auto flex gap-2">
           <button
             onClick={handleClear}
-            className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-rose-300 dark:border-rose-900 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center justify-center gap-1 transition"
+            className="p-1.5 text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg flex items-center gap-1 transition"
+            title="Очистить всё полотно"
           >
-            <Trash2 className="w-3.5 h-3.5" /> Очистить
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
@@ -400,7 +410,15 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
       {/* Main Geometry Canvas Area */}
       <div className="flex-1 relative flex flex-col h-full overflow-hidden">
         {/* Top Tools Palette */}
-        <div className="p-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center gap-1.5 flex-wrap z-10 shadow-sm">
+        <div className="p-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center gap-1.5 flex-wrap z-10 shadow-sm">
+          <button
+            onClick={() => setIsBuilderOpen(true)}
+            title="Быстрое построение по тексту задачи"
+            className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 flex items-center gap-1.5 transition mr-1"
+          >
+            <Sparkles className="w-3.5 h-3.5" /> Задать параметры задачи
+          </button>
+
           <button
             onClick={() => setActiveTool('select')}
             title="Выбор и перемещение"
@@ -435,18 +453,6 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
             }`}
           >
             <Minus className="w-4 h-4" /> Отрезок
-          </button>
-
-          <button
-            onClick={() => setActiveTool('line')}
-            title="Прямая"
-            className={`p-2 rounded-xl text-xs flex items-center gap-1 font-medium transition ${
-              activeTool === 'line'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            ↔ Прямая
           </button>
 
           <button
@@ -494,7 +500,7 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
                 : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            📏 Расстояние
+            📏 Длина
           </button>
 
           <button
@@ -513,7 +519,7 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
         {/* Dynamic Instructional Banner */}
         <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900 text-xs text-indigo-800 dark:text-indigo-300 flex items-center gap-2">
           <Info className="w-4 h-4 text-indigo-500 shrink-0" />
-          <span>{statusMessage}</span>
+          <span className="font-medium">{statusMessage}</span>
         </div>
 
         {/* JSXGraph Host Element */}
@@ -523,6 +529,17 @@ export const GeometryBoard: React.FC<GeometryBoardProps> = () => {
           style={{ minHeight: '400px' }}
         />
       </div>
+
+      {/* Task Builder Modal */}
+      <GeometryTaskBuilderModal
+        isOpen={isBuilderOpen}
+        onClose={() => setIsBuilderOpen(false)}
+        onBuildRightTriangle={handleBuildRightTriangle}
+        onBuildIsoscelesTriangle={handleBuildIsoscelesTriangle}
+        onBuildTriangleBySides={handleBuildTriangleBySides}
+        onBuildTrapezoid={handleBuildTrapezoid}
+        onLoadPreset={(id) => loadPreset(id)}
+      />
     </div>
   );
 };

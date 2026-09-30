@@ -12,9 +12,12 @@ import {
   Table,
   ZoomIn,
   ZoomOut,
+  Search,
+  Check
 } from 'lucide-react';
-import type { PlotFunction, PlotParameter, KeyPoint } from '../../types';
 
+import type { PlotFunction, PlotParameter, KeyPoint } from '../../types';
+import { PLOTTER_TEMPLATES, type PlotterTemplate } from '../../data/plotterTemplates';
 
 interface PlotterProps {
   isDark: boolean;
@@ -22,17 +25,6 @@ interface PlotterProps {
 }
 
 const DEFAULT_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
-
-const PRESET_TEMPLATES = [
-  { label: 'Парабола с параметрами', expr: 'a * x^2 + b * x + c' },
-  { label: 'Квадратичная', expr: 'x^2 - 4*x + 3' },
-  { label: 'Линейная функция', expr: 'k * x + b' },
-  { label: 'Гипербола (1/x)', expr: '1 / x' },
-  { label: 'Квадратный корень', expr: 'sqrt(x)' },
-  { label: 'Модуль |x|', expr: 'abs(x)' },
-  { label: 'Синусоида', expr: 'a * sin(b * x)' },
-  { label: 'Кубическая парабола', expr: 'x^3 - 3*x' },
-];
 
 export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -80,10 +72,11 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  // Key Points list & Table view
+  // Key Points list & Tab view
   const [showKeyPoints, setShowKeyPoints] = useState(true);
-  const [activeTab, setActiveTab] = useState<'functions' | 'sliders' | 'table'>('functions');
-
+  const [activeTab, setActiveTab] = useState<'functions' | 'sliders' | 'templates' | 'table'>('functions');
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [templateCategory, setTemplateCategory] = useState<string>('all');
 
   // Sync when initialFunctions change
   useEffect(() => {
@@ -175,10 +168,8 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
         return { ...fn, compiled: null, isValid: false };
       }
       try {
-        // Clean expressions: replace raw ^ or format
         const cleanExpr = fn.expression;
         const compiled = math.compile(cleanExpr);
-        // Test evaluation at x = 1
         compiled.evaluate({ ...scope, x: 1 });
         return { ...fn, compiled, isValid: true, error: undefined };
       } catch (err: any) {
@@ -209,7 +200,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
         }
       };
 
-
       // Y-intercept f(0)
       const y0 = evalFn(0);
       if (!isNaN(y0) && Math.abs(y0) < 1000) {
@@ -229,7 +219,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
         const yB = evalFn(x + step);
 
         if (!isNaN(yA) && !isNaN(yB) && (yA * yB <= 0 || Math.abs(yA) < 1e-4)) {
-          // Bisection refinement
           let left = x;
           let right = x + step;
           for (let iter = 0; iter < 10; iter++) {
@@ -246,7 +235,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
             }
           }
           const rootX = parseFloat(((left + right) / 2).toFixed(2));
-          // Avoid duplicate roots
           if (!points.some((p) => p.type === 'root' && Math.abs(p.x - rootX) < 0.1)) {
             points.push({
               x: rootX,
@@ -309,7 +297,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
               } catch {}
             }
           }
-
         }
       }
     }
@@ -370,7 +357,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
     const axisColor = isDark ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)';
     const textColor = isDark ? '#94a3b8' : '#64748b';
 
-    // Step calculation based on scale
     let unitStep = 1;
     if (view.scale > 80) unitStep = 0.5;
     if (view.scale > 160) unitStep = 0.2;
@@ -459,7 +445,7 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
       ctx.beginPath();
 
       let isDrawing = false;
-      const pixelStep = 2; // draw every 2px for crisp smoothness and performance
+      const pixelStep = 2;
 
       for (let px = 0; px <= width; px += pixelStep) {
         const { mathX } = toMath(px, 0, width, height);
@@ -503,7 +489,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Label
         ctx.font = '11px sans-serif';
         ctx.fillStyle = isDark ? '#f8fafc' : '#0f172a';
         ctx.fillText(kp.label, screenX + 7, screenY - 7);
@@ -516,13 +501,11 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
       ctx.setLineDash([4, 4]);
       ctx.lineWidth = 1;
 
-      // Vertical guide
       ctx.beginPath();
       ctx.moveTo(hoverCoord.screenX, 0);
       ctx.lineTo(hoverCoord.screenX, height);
       ctx.stroke();
 
-      // Horizontal guide
       ctx.beginPath();
       ctx.moveTo(0, hoverCoord.screenY);
       ctx.lineTo(width, hoverCoord.screenY);
@@ -596,6 +579,43 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
     ]);
   };
 
+  // Apply rich template
+  const applyTemplate = (tmpl: PlotterTemplate) => {
+    const newFns: PlotFunction[] = tmpl.expressions.map((expr, idx) => ({
+      id: `fn-${Date.now()}-${idx}`,
+      expression: expr,
+      color: DEFAULT_COLORS[idx % DEFAULT_COLORS.length],
+      visible: true,
+      isValid: true,
+    }));
+    setFunctions(newFns);
+
+    if (tmpl.defaultParams && tmpl.defaultParams.length > 0) {
+      setParameters((prev) => {
+        const updated = [...prev];
+        tmpl.defaultParams!.forEach((dp) => {
+          const idx = updated.findIndex((p) => p.name === dp.name);
+          if (idx >= 0) {
+            updated[idx] = { ...updated[idx], value: dp.value };
+          } else {
+            updated.push({
+              name: dp.name,
+              value: dp.value,
+              min: -5,
+              max: 5,
+              step: 0.1,
+              isPlaying: false,
+            });
+          }
+        });
+        return updated;
+      });
+    }
+
+    setView({ centerX: 0, centerY: 0, scale: 45 });
+    setActiveTab('functions');
+  };
+
   // Quick insertion of math symbols
   const insertSymbol = (fnId: string, symbol: string) => {
     setFunctions((prev) =>
@@ -608,6 +628,17 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
     );
   };
 
+  // Filter templates
+  const filteredTemplates = PLOTTER_TEMPLATES.filter((tmpl) => {
+    const matchesCat = templateCategory === 'all' || tmpl.category === templateCategory;
+    const q = templateSearch.toLowerCase();
+    const matchesSearch =
+      tmpl.title.toLowerCase().includes(q) ||
+      tmpl.description.toLowerCase().includes(q) ||
+      tmpl.expressions.some((e) => e.toLowerCase().includes(q));
+    return matchesCat && matchesSearch;
+  });
+
   return (
     <div className="relative w-full h-full flex flex-col md:flex-row overflow-hidden bg-slate-50 dark:bg-slate-950">
       {/* Left Sidebar: Controls & Functions */}
@@ -616,17 +647,27 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
         <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-800/60 p-1 gap-1">
           <button
             onClick={() => setActiveTab('functions')}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium transition ${
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition ${
               activeTab === 'functions'
                 ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            Функции ({functions.length})
+            Графики ({functions.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('templates')}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition ${
+              activeTab === 'templates'
+                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Шаблоны
           </button>
           <button
             onClick={() => setActiveTab('sliders')}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition ${
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition ${
               activeTab === 'sliders'
                 ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -636,7 +677,7 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
           </button>
           <button
             onClick={() => setActiveTab('table')}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition ${
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition ${
               activeTab === 'table'
                 ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -657,7 +698,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
                   className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-2"
                 >
                   <div className="flex items-center gap-2">
-                    {/* Color picker */}
                     <input
                       type="color"
                       value={fn.color}
@@ -669,12 +709,10 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
                       className="w-5 h-5 rounded cursor-pointer border-none bg-transparent"
                     />
 
-                    {/* f(x) = */}
                     <span className="font-mono text-xs font-bold text-slate-500">
                       f{idx + 1}(x) =
                     </span>
 
-                    {/* Input */}
                     <input
                       type="text"
                       value={fn.expression}
@@ -687,7 +725,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
                       className="flex-1 px-2.5 py-1 text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-indigo-500"
                     />
 
-                    {/* Toggle Visibility */}
                     <button
                       onClick={() =>
                         setFunctions((prev) =>
@@ -699,7 +736,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
                       {fn.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4 opacity-40" />}
                     </button>
 
-                    {/* Remove */}
                     {functions.length > 1 && (
                       <button
                         onClick={() => setFunctions((prev) => prev.filter((f) => f.id !== fn.id))}
@@ -723,7 +759,6 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
                     ))}
                   </div>
 
-                  {/* Error display if invalid */}
                   {!fn.isValid && fn.error && (
                     <div className="text-xs text-rose-500 font-mono">⚠ {fn.error}</div>
                   )}
@@ -737,25 +772,86 @@ export const Plotter: React.FC<PlotterProps> = ({ isDark, initialFunctions }) =>
               >
                 <Plus className="w-4 h-4" /> Добавить график
               </button>
-
-              {/* Presets dropdown / list */}
-              <div className="pt-2">
-                <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Быстрые шаблоны:
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRESET_TEMPLATES.map((tmpl) => (
-                    <button
-                      key={tmpl.expr}
-                      onClick={() => addFunction(tmpl.expr)}
-                      className="px-2 py-1 text-xs bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 rounded-lg text-slate-600 dark:text-slate-300 transition"
-                    >
-                      {tmpl.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </>
+          )}
+
+          {activeTab === 'templates' && (
+            <div className="space-y-3">
+              {/* Template search */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  placeholder="Поиск формулы (парабола, модуль, синус...)"
+                  className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 outline-none"
+                />
+              </div>
+
+              {/* Categories */}
+              <div className="flex gap-1 overflow-x-auto pb-1 text-[11px]">
+                {[
+                  { id: 'all', label: 'Все' },
+                  { id: 'algebra', label: 'Алгебра 7-9' },
+                  { id: 'oge_ege', label: 'Модули / ОГЭ' },
+                  { id: 'systems', label: 'Системы' },
+                  { id: 'trig', label: 'Тригонометрия' },
+                  { id: 'advanced', label: 'Степени/Лог' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setTemplateCategory(cat.id)}
+                    className={`px-2 py-0.5 rounded-md whitespace-nowrap transition ${
+                      templateCategory === cat.id
+                        ? 'bg-indigo-600 text-white font-medium'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Templates Cards List */}
+              <div className="space-y-2">
+                {filteredTemplates.map((tmpl) => (
+                  <div
+                    key={tmpl.id}
+                    className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        {tmpl.title}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                        {tmpl.categoryLabel}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1">
+                      {tmpl.expressions.map((e, idx) => (
+                        <code
+                          key={idx}
+                          className="px-1.5 py-0.5 text-[11px] font-mono rounded bg-white dark:bg-slate-900 border text-indigo-600 dark:text-indigo-300"
+                        >
+                          y = {e}
+                        </code>
+                      ))}
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 line-clamp-2">{tmpl.description}</p>
+
+                    <button
+                      onClick={() => applyTemplate(tmpl)}
+                      className="w-full mt-1 py-1.5 px-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Применить шаблон
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {activeTab === 'sliders' && (
