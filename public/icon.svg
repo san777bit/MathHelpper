@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+    <linearGradient id="curveGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+  </defs>
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="112" fill="url(#grad1)"/>
+  
+  <!-- Grid overlay -->
+  <path d="M96 160h320M96 256h320M96 352h320M160 96v320M256 96v320M352 96v320" stroke="rgba(255,255,255,0.15)" stroke-width="4" stroke-dasharray="8 8"/>
+  
+  <!-- Coordinate axes -->
+  <line x1="96" y1="360" x2="416" y2="360" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+  <polyline points="404,348 418,360 404,372" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <line x1="140" y1="416" x2="140" y2="96" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+  <polyline points="128,108 140,94 152,108" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Smooth Mathematical Function Curve (Parabola / Sine) -->
+  <path d="M120 340 Q 240 80 400 310" fill="none" stroke="url(#curveGrad)" stroke-width="14" stroke-linecap="round"/>
+  
+  <!-- Key point / vertex highlight -->
+  <circle cx="240" cy="180" r="14" fill="#ffffff" stroke="#ec4899" stroke-width="6"/>
+  
+  <!-- Pi / Square root / Symbol accent -->
+  <text x="310" y="170" font-family="system-ui, sans-serif" font-weight="900" font-size="70" fill="rgba(255,255,255,0.85)">f(x)</text>
+</svg>

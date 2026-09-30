@@ -1,0 +1,23 @@
+{
+  "name": "MathHelpper — Помощник учителя математики",
+  "short_name": "MathHelpper",
+  "description": "Интерактивная доска, графики функций, динамическая геометрия, пошаговый решатель и справочник",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "32x32 48x48",
+      "type": "image/svg+xml"
+    }
+  ]
+}
